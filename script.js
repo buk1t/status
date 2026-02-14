@@ -1,10 +1,7 @@
 (() => {
   const DOMAIN = "buk1t.com";
 
-  // Prefer a local file if you add it later. Optional.
   const LOCAL_CONFIG = "/status.json";
-
-  // Registry (source of truth)
   const SITEMAP = "https://api.buk1t.com/json/buk1t.json";
 
   const WARN_MS = 900;
@@ -12,7 +9,11 @@
 
   const ISSUE_EMAIL = "dev@buk1t.com";
 
-  // fallback only — status must survive if api is down
+  // GitHub access
+  const GH_PROXY = "https://api.buk1t.com/api/gh.js?url=";
+  const GH_DIRECT = "https://api.github.com/repos/";
+
+  // fallback — status must survive if api is down
   const FALLBACK_REPOS = {
     www: "https://github.com/buk1t/www",
     labs: "https://github.com/buk1t/labs",
@@ -23,13 +24,11 @@
     wildcard: "https://github.com/buk1t/catch-all"
   };
 
-  // ---------- DOM ----------
   const checksEl = document.getElementById("checks");
   const subtitleEl = document.getElementById("subtitle");
   const metaEl = document.getElementById("meta");
   const reportBtn = document.getElementById("reportBtn");
 
-  // ---------- utils ----------
   function uniqBy(arr, keyFn) {
     const seen = new Set();
     const out = [];
@@ -63,8 +62,8 @@
   }
 
   function linkPill(status, text, href) {
-    const p = document.createElement("span");
-    p.className = "pill";
+    const p = pill(status, "");
+    p.innerHTML = "";
 
     const d = document.createElement("span");
     d.className = "dot";
@@ -144,7 +143,6 @@
     return { box, st };
   }
 
-  // ---------- reachability + latency ----------
   async function ping(url) {
     const controller = new AbortController();
     const start = performance.now();
@@ -188,8 +186,6 @@
   }
 
   async function loadTargets() {
-    // hard truth: status page should NOT depend on api,
-    // so defaults always exist.
     let targets = [
       { name: "www", url: `https://www.${DOMAIN}/` },
       { name: "labs", url: `https://labs.${DOMAIN}/` },
@@ -199,40 +195,28 @@
       { name: "api", url: `https://api.${DOMAIN}/` }
     ];
 
-    // Optional local config
     try {
       const local = await tryJson(LOCAL_CONFIG);
       if (Array.isArray(local.targets)) targets = local.targets;
-      if (Array.isArray(local.checks)) targets = local.checks; // allow either key
+      if (Array.isArray(local.checks)) targets = local.checks;
     } catch {}
 
-    // Optional sitemap enrichment (nice-to-have)
     try {
       const map = await tryJson(SITEMAP);
-
-      // Back-compat: map.items like your old sitemap format
       const items = Array.isArray(map.items) ? map.items : [];
-      const subs = [
-        ...new Set(
-          items.map((it) => String(it.subdomain || "www").toLowerCase().trim())
-        )
-      ];
-
-      // Filter ONLY to your canonical set
-      const allowed = new Set(["www", "labs", "search", "status", "about", "api"]);
+      const subs = [...new Set(items.map(it => String(it.subdomain || "www").toLowerCase().trim()))];
+      const allowed = new Set(["www","labs","search","status","about","api"]);
       const fromMap = subs
-        .filter((s) => allowed.has(s))
-        .map((s) => ({ name: s, url: `https://${s}.${DOMAIN}/` }));
+        .filter(s => allowed.has(s))
+        .map(s => ({ name: s, url: `https://${s}.${DOMAIN}/` }));
 
-      targets = uniqBy([...targets, ...fromMap], (t) => t.url);
+      targets = uniqBy([...targets, ...fromMap], t => t.url);
     } catch {}
 
-    // Always include wildcard test
     targets.push(makeWildcardTarget());
-    return uniqBy(targets, (t) => t.url);
+    return uniqBy(targets, t => t.url);
   }
 
-  // ---------- repo pills ----------
   function parseRepoSlug(input) {
     const s = String(input || "").trim();
     const https = s.match(/^https?:\/\/github\.com\/([^/]+)\/([^/]+?)\/?$/i);
@@ -258,49 +242,51 @@
     const slug = parseRepoSlug(repoUrlOrSlug);
     if (!slug) return { slug: null, pushed_at: null, html_url: null };
 
-    const res = await fetch(`https://api.github.com/repos/${slug}`, {
-      headers: { "Accept": "application/vnd.github+json" },
-      cache: "no-store"
-    });
+    const directUrl = `${GH_DIRECT}${slug}`;
+    const proxyUrl = `${GH_PROXY}${encodeURIComponent(directUrl)}`;
 
-    if (!res.ok) {
-      return { slug, pushed_at: null, html_url: `https://github.com/${slug}` };
+    async function fetchJson(url) {
+      const res = await fetch(url, {
+        headers: { "Accept": "application/vnd.github+json" },
+        cache: "no-store"
+      });
+      if (!res.ok) throw new Error("bad response");
+      return await res.json();
     }
-    const data = await res.json();
-    return {
-      slug,
-      pushed_at: data.pushed_at || null,
-      html_url: data.html_url || `https://github.com/${slug}`
-    };
+
+    // Try proxy first
+    try {
+      const data = await fetchJson(proxyUrl);
+      return {
+        slug,
+        pushed_at: data.pushed_at || null,
+        html_url: data.html_url || `https://github.com/${slug}`
+      };
+    } catch {
+      // fallback to direct GitHub
+      try {
+        const data = await fetchJson(directUrl);
+        return {
+          slug,
+          pushed_at: data.pushed_at || null,
+          html_url: data.html_url || `https://github.com/${slug}`
+        };
+      } catch {
+        return { slug, pushed_at: null, html_url: `https://github.com/${slug}` };
+      }
+    }
   }
 
   function repoPill(htmlUrl, pushed_at) {
     const label = pushed_at ? `repo • ${relTime(pushed_at)}` : `repo • unavailable`;
-    const p = pill(pushed_at ? "up" : "warn", label);
-
-    if (htmlUrl) {
-      p.innerHTML = "";
-      const d = document.createElement("span");
-      d.className = "dot";
-      d.style.background = pushed_at ? "var(--good)" : "var(--warn)";
-
-      const a = document.createElement("a");
-      a.href = htmlUrl;
-      a.target = "_blank";
-      a.rel = "noopener";
-      a.textContent = label;
-
-      p.appendChild(d);
-      p.appendChild(a);
-    }
-    return p;
+    return linkPill(pushed_at ? "up" : "warn", label, htmlUrl);
   }
 
   function normalizeRepos(map) {
     const out = {};
-    for (const [k, v] of Object.entries(map || {})) {
-      const key = String(k || "").toLowerCase().trim();
-      const val = String(v || "").trim();
+    for (const [k,v] of Object.entries(map || {})) {
+      const key = String(k||"").toLowerCase().trim();
+      const val = String(v||"").trim();
       if (key && val) out[key] = val;
     }
     return out;
@@ -309,7 +295,6 @@
   async function loadRepoMap() {
     let repos = { ...FALLBACK_REPOS };
 
-    // local override (optional)
     try {
       const local = await tryJson(LOCAL_CONFIG);
       if (local && typeof local.repos === "object") {
@@ -317,29 +302,19 @@
       }
     } catch {}
 
-    // remote registry (nice-to-have)
     try {
       const map = await tryJson(SITEMAP);
-
-      // Preferred schema
-      if (map && typeof map.repos === "object") {
-        repos = { ...repos, ...normalizeRepos(map.repos) };
-      }
-
-      // Back-compat
-      if (map && typeof map.repo_map === "object") {
-        repos = { ...repos, ...normalizeRepos(map.repo_map) };
-      }
+      if (map?.repos) repos = { ...repos, ...normalizeRepos(map.repos) };
+      if (map?.repo_map) repos = { ...repos, ...normalizeRepos(map.repo_map) };
     } catch {}
 
     return repos;
   }
 
-  // ---------- report ----------
   function setupReportButton(extraContext = "") {
     if (!reportBtn) return;
 
-    reportBtn.addEventListener("click", (e) => {
+    reportBtn.addEventListener("click", e => {
       e.preventDefault();
       const now = new Date();
       const subject = `buk1t issue report (${now.toLocaleString()})`;
@@ -366,60 +341,62 @@
     });
   }
 
-  // ---------- main ----------
   async function main() {
-    subtitleEl.textContent = navigator.onLine ? "Checking services…" : "You appear to be offline.";
+    subtitleEl.textContent = navigator.onLine
+      ? "Checking services…"
+      : "You appear to be offline.";
 
     const targets = await loadTargets();
-
     checksEl.innerHTML = "";
-    const cards = targets.map((t) => ({ t, ...makeCard(t) }));
+    const cards = targets.map(t => ({ t, ...makeCard(t) }));
 
     const results = await Promise.all(
-      cards.map(async (c) => ({ c, r: await ping(c.t.url) }))
+      cards.map(async c => ({ c, r: await ping(c.t.url) }))
     );
 
-    let up = 0, slow = 0, down = 0;
+    let up=0, slow=0, down=0;
 
     for (const { c, r } of results) {
       c.st.innerHTML = "";
 
-      const href = c.t.url;
-
       if (r.ok) {
-        if (r.ms != null && r.ms >= WARN_MS) {
+        if (r.ms >= WARN_MS) {
           slow++;
-          c.st.appendChild(linkPill("slow", `slow • ${r.ms}ms`, href));
+          c.st.appendChild(linkPill("slow", `slow • ${r.ms}ms`, c.t.url));
         } else {
           up++;
-          c.st.appendChild(linkPill("up", `up • ${r.ms ?? "?"}ms`, href));
+          c.st.appendChild(linkPill("up", `up • ${r.ms}ms`, c.t.url));
         }
       } else {
         down++;
-        c.st.appendChild(linkPill("down", "down • unreachable", href));
+        c.st.appendChild(linkPill("down", "down • unreachable", c.t.url));
       }
     }
 
     subtitleEl.textContent =
-      down === 0 && slow === 0 ? `All good — ${up} up` : `${up} up • ${slow} slow • ${down} down`;
+      down===0 && slow===0
+        ? `All good — ${up} up`
+        : `${up} up • ${slow} slow • ${down} down`;
 
-    // Repo pills (optional; don’t die if rate-limited)
     let newestPush = null;
     try {
       const repoMap = await loadRepoMap();
 
       const needed = uniqBy(
         cards
-          .map((c) => {
+          .map(c => {
             const key = (c.t.repoKey || c.t.name || "").toLowerCase();
             return { key, repo: repoMap[key] };
           })
-          .filter((x) => x.repo),
-        (x) => x.repo
+          .filter(x => x.repo),
+        x => x.repo
       );
 
-      const infos = await Promise.all(needed.map((x) => fetchRepoInfo(x.repo)));
-      const infoBySlug = new Map(infos.map((i) => [i.slug, i]));
+      const infos = await Promise.all(
+        needed.map(x => fetchRepoInfo(x.repo))
+      );
+
+      const infoBySlug = new Map(infos.map(i => [i.slug, i]));
 
       for (const c of cards) {
         const key = (c.t.repoKey || c.t.name || "").toLowerCase();
@@ -431,12 +408,12 @@
 
         if (info?.pushed_at) {
           const ts = new Date(info.pushed_at).getTime();
-          if (newestPush == null || ts > newestPush) newestPush = ts;
+          if (!newestPush || ts > newestPush) newestPush = ts;
         }
 
         c.st.appendChild(
           repoPill(
-            info?.html_url || (slug ? `https://github.com/${slug}` : repo),
+            info?.html_url || `https://github.com/${slug}`,
             info?.pushed_at || null
           )
         );
@@ -444,13 +421,17 @@
     } catch {}
 
     setupReportButton(
-      newestPush ? `Most recent repo push: ${new Date(newestPush).toISOString()}` : ""
+      newestPush
+        ? `Most recent repo push: ${new Date(newestPush).toISOString()}`
+        : ""
     );
 
     const checkedAt = new Date();
     metaEl.textContent =
       `checked: ${checkedAt.toLocaleString()}` +
-      (newestPush ? ` • latest repo push: ${relTime(new Date(newestPush).toISOString())}` : "");
+      (newestPush
+        ? ` • latest repo push: ${relTime(new Date(newestPush).toISOString())}`
+        : "");
   }
 
   main();
