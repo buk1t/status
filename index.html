@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>buk1t status</title>
+    <meta name="description" content="Live status for buk1t services." />
+    <meta name="color-scheme" content="dark light" />
+
+    <!-- Keep CSS local so status works even if api is down -->
+    <link rel="stylesheet" href="./style.css" />
+
+    <!-- Favicons can stay on api, but you can also duplicate them on status for max resilience -->
+    <link
+      rel="icon"
+      type="image/png"
+      href="https://api.buk1t.com/favicon/favicon-96x96.png"
+      sizes="96x96"
+    />
+    <link
+      rel="icon"
+      type="image/svg+xml"
+      href="https://api.buk1t.com/favicon/favicon.svg"
+    />
+    <link
+      rel="shortcut icon"
+      href="https://api.buk1t.com/favicon/favicon.ico"
+    />
+    <link
+      rel="apple-touch-icon"
+      sizes="180x180"
+      href="https://api.buk1t.com/favicon/apple-touch-icon.png"
+    />
+    <link
+      rel="manifest"
+      href="https://api.buk1t.com/favicon/site.webmanifest"
+    />
+  </head>
+
+  <body>
+    <main>
+      <header class="top">
+        <h1>Status</h1>
+        <p class="sub" id="subtitle">Checking services…</p>
+
+        <div class="row">
+          <a class="btn" href="https://www.buk1t.com">Homepage</a>
+          <a
+            class="btn"
+            id="reportBtn"
+            href="mailto:dev@buk1t.com?subject=Buk1t%20Status%20Issue&body=What%27s%20broken%3F%0A%0AWhich%20URL%3F%0A%0AWhat%20happened%3F%0A%0ATime%20(approx)%3F%0A"
+            >Report an issue</a
+          >
+        </div>
+      </header>
+
+      <section class="card">
+        <div class="grid" id="checks" aria-live="polite"></div>
+        <p class="small" id="meta"></p>
+
+        <noscript>
+          <p class="small">
+            JavaScript is required to run live checks. If something seems down,
+            email <a href="mailto:dev@buk1t.com">dev@buk1t.com</a>.
+          </p>
+        </noscript>
+      </section>
+    </main>
+
+    <!-- Keep JS local so status still works if api is down -->
+    <script src="./script.js"></script>
+  </body>
+</html>

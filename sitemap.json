@@ -1,0 +1,20 @@
+{
+  "domain": "buk1t.com",
+  "checks": [
+    { "name": "www", "url": "https://www.buk1t.com/", "tag": "site" },
+    { "name": "labs", "url": "https://labs.buk1t.com/", "tag": "site" },
+    { "name": "search", "url": "https://search.buk1t.com/", "tag": "site" },
+    { "name": "about", "url": "https://about.buk1t.com/", "tag": "site" },
+    { "name": "status", "url": "https://status.buk1t.com/", "tag": "site" },
+    { "name": "api", "url": "https://api.buk1t.com/", "tag": "api" }
+  ],
+  "repo_map": {
+    "www": "https://github.com/buk1t/www",
+    "labs": "https://github.com/buk1t/labs",
+    "search": "https://github.com/buk1t/search",
+    "about": "https://github.com/buk1t/about",
+    "status": "https://github.com/buk1t/status",
+    "api": "https://github.com/buk1t/api",
+    "wildcard": "https://github.com/buk1t/catch-all"
+  }
+}
