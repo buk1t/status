@@ -59,6 +59,29 @@
     return p;
   }
 
+    function linkPill(status, text, href) {
+    const p = document.createElement("span");
+    p.className = "pill";
+
+    const d = document.createElement("span");
+    d.className = "dot";
+    d.style.background =
+      status === "up" ? "var(--good)" :
+      status === "slow" ? "var(--warn)" :
+      status === "down" ? "var(--bad)" :
+      "var(--warn)";
+
+    const a = document.createElement("a");
+    a.href = href;
+    a.target = "_blank";
+    a.rel = "noopener";
+    a.textContent = text;
+
+    p.appendChild(d);
+    p.appendChild(a);
+    return p;
+  }
+
   function buildUrlLine(url, subtitle) {
     const el = document.createElement("div");
     el.className = "url";
@@ -305,17 +328,19 @@
     for (const { c, r } of results) {
       c.st.innerHTML = "";
 
+      const href = c.t.url;
+
       if (r.ok) {
         if (r.ms != null && r.ms >= WARN_MS) {
-          slow++;
-          c.st.appendChild(pill("slow", `slow • ${r.ms}ms`));
+        slow++;
+        c.st.appendChild(linkPill("slow", `slow • ${r.ms}ms`, href));
         } else {
-          up++;
-          c.st.appendChild(pill("up", `up • ${r.ms ?? "?"}ms`));
+        up++;
+        c.st.appendChild(linkPill("up", `up • ${r.ms ?? "?"}ms`, href));
         }
       } else {
         down++;
-        c.st.appendChild(pill("down", "down • unreachable"));
+        c.st.appendChild(linkPill("down", "down • unreachable", href));
       }
     }
 
